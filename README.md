@@ -1,6 +1,6 @@
 # luci-app-kidtime
 
-Per-device **internet time control** for **OpenWrt 23.05**. Two independent gates
+Per-device **internet time control and parental control** for **OpenWrt 23.05** or later Version (tested with 23.05). Two independent gates
 are applied to each device (or group of devices):
 
 1. **Time windows** — allowed timeframes per weekday (e.g. `mon,tue,wed,thu,fri 07:00-20:00`).
@@ -12,39 +12,6 @@ are applied to each device (or group of devices):
 
 Devices can be **grouped** so several devices (e.g. one child's phone + tablet)
 share a single budget pool.
-
-This is a from-scratch implementation — it is **not** a port of
-`luci-app-parentalcontrol` (that package does windows only, has no budget, and is
-packaged for 25.x). It runs natively on 23.05 with fw4/nftables.
-
----
-
-## Why this works on 23.05
-
-OpenWrt 23.05 already ships everything required:
-
-- **fw4 / nftables** — the enforcement uses one small `table inet kidtime` with a
-  `forward` hook and a single `blocked` MAC set. It does **not** touch your fw4
-  zone rules, so your three firewall zones (WAN_DMZ / WLAN / INTERN) are untouched.
-- **rpcd + ubus** — the LuCI UI talks to a small rpcd shell plugin.
-- **dnsmasq** — used only to populate the device picker from DHCP leases.
-- **cron** — a one-line crontab entry runs the per-minute accounting tick.
-
-### A note about your topology
-
-OpenWrt routes between all three VLANs, so the **forward** chain sees traffic from
-INTERN and WLAN devices heading to the internet (via the Fritzbox) — which is
-exactly where this blocks. The hook priority (`-150`) places it ahead of fw4's
-normal forwarding so a blocked device is dropped early.
-
-Because matching is on **`ether saddr` (source MAC)**, the device must be on a
-network where OpenWrt sees its real MAC as the L2 source — i.e. a VLAN/subnet that
-OpenWrt is directly attached to. INTERN (192.168.100.0/24) and WLAN
-(192.168.122.0/24) both qualify. Make sure **MAC randomisation is OFF** on the
-kids' devices for the chosen Wi-Fi SSID, otherwise the MAC will change and the
-rule won't match. (You picked MAC-based identification; if a device insists on
-randomising, pin it to a static DHCP lease and disable "private/random MAC" for
-that SSID in the device's settings.)
 
 ---
 
@@ -67,13 +34,6 @@ sh /etc/uci-defaults/luci-app-kidtime      # creates default config, enables ser
 ```
 
 The page appears under **Services → Internet Time (Kids)**.
-
-### Building a real .ipk (optional)
-
-If you use the OpenWrt 23.05 SDK with the luci feed, drop this directory into
-`package/` (or a feed) and `make package/luci-app-kidtime/compile`. The provided
-`Makefile` uses `luci.mk`, which produces a standard `.ipk` on 23.05. (The direct
-copy above is simpler and is the recommended path.)
 
 ---
 
