@@ -1,0 +1,43 @@
+#!/bin/sh /etc/rc.common
+# /etc/init.d/kidtime
+START=99
+STOP=10
+USE_PROCD=1
+
+BIN=/usr/libexec/kidtime.sh
+CRON_FILE=/etc/crontabs/root
+CRON_LINE="* * * * * $BIN tick >/dev/null 2>&1"
+
+_install_cron() {
+	mkdir -p /etc/crontabs
+	touch "$CRON_FILE"
+	grep -qF "$BIN tick" "$CRON_FILE" 2>/dev/null || echo "$CRON_LINE" >> "$CRON_FILE"
+	/etc/init.d/cron enable 2>/dev/null
+	/etc/init.d/cron restart 2>/dev/null
+}
+
+_remove_cron() {
+	[ -f "$CRON_FILE" ] || return 0
+	sed -i "\|$BIN tick|d" "$CRON_FILE"
+	/etc/init.d/cron restart 2>/dev/null
+}
+
+start_service() {
+	"$BIN" setup
+	"$BIN" apply
+	_install_cron
+}
+
+stop_service() {
+	_remove_cron
+	"$BIN" teardown
+}
+
+reload_service() {
+	"$BIN" apply
+}
+
+# react to UCI changes via `reload_config`
+service_triggers() {
+	procd_add_reload_trigger "kidtime"
+}

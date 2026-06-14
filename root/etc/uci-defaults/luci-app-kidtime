@@ -1,0 +1,16 @@
+#!/bin/sh
+# first-boot setup
+[ -f /etc/config/kidtime ] || cat > /etc/config/kidtime <<'CFG'
+config global 'global'
+	option enabled '1'
+	option active_threshold '5'
+CFG
+
+chmod +x /usr/libexec/kidtime.sh /usr/libexec/rpcd/kidtime /etc/init.d/kidtime 2>/dev/null
+
+/etc/init.d/kidtime enable 2>/dev/null
+/etc/init.d/rpcd restart 2>/dev/null
+
+# clear luci cache so the menu appears
+rm -f /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+exit 0

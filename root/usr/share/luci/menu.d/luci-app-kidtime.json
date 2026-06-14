@@ -1,0 +1,13 @@
+{
+	"admin/services/kidtime": {
+		"title": "Internet Time (Kids)",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "kidtime/settings"
+		},
+		"depends": {
+			"acl": [ "luci-app-kidtime" ]
+		}
+	}
+}

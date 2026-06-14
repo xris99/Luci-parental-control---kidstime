@@ -1,0 +1,106 @@
+#!/bin/sh
+# /usr/libexec/rpcd/kidtime
+# rpcd plugin: bridges the LuCI UI to UCI config + kidtime.sh backend.
+. /usr/share/libubox/jshn.sh
+BIN=/usr/libexec/kidtime.sh
+
+_fail() { json_init; json_add_boolean ok 0; json_add_string error "$1"; json_dump; }
+_ok()   { json_init; json_add_boolean ok 1; json_dump; }
+
+case "$1" in
+list)
+	json_init
+	json_add_object get_status;  json_close_object
+	json_add_object list_devices; json_close_object
+	json_add_object toggle_global; json_add_string enabled ""; json_close_object
+	json_add_object set_config; json_add_string config ""; json_close_object
+	json_add_object extend; json_add_string mac ""; json_add_string minutes ""; json_close_object
+	json_add_object reset_day; json_close_object
+	json_dump
+	;;
+call)
+	method="$2"
+	read -r input
+	case "$method" in
+	get_status)
+		# Status is a READ-ONLY, fast path. It must never run apply/nft or any
+		# long/locking operation, otherwise the rpcd worker (and with it LuCI)
+		# can stall. The per-minute cron tick keeps enforcement current; config
+		# changes call apply explicitly via set_config.
+		json_init
+		json_add_boolean ok 1
+		# global
+		en=$(uci -q get kidtime.global.enabled); [ -z "$en" ] && en=1
+		json_add_int global_enabled "$en"
+		# usage.json blob (written by the tick); empty object if not present yet
+		usage="{}"; [ -f /etc/kidtime/usage.json ] && usage=$(cat /etc/kidtime/usage.json)
+		json_add_string usage "$usage"
+		# full UCI export so the UI can render rules/groups without many calls
+		cfg=$(uci -q export kidtime)
+		json_add_string config "$cfg"
+		json_dump
+		;;
+	list_devices)
+		# merge DHCP leases + ARP into name/mac/ip rows
+		json_init; json_add_boolean ok 1; json_add_array devices
+		# dnsmasq leases: <expiry> <mac> <ip> <name> <clientid>
+		if [ -f /tmp/dhcp.leases ]; then
+			while read -r _exp mac ip name _cid; do
+				[ -z "$mac" ] && continue
+				json_add_object ""
+				json_add_string mac "$mac"
+				json_add_string ip "$ip"
+				json_add_string name "${name:-*}"
+				json_close_object
+			done < /tmp/dhcp.leases
+		fi
+		json_close_array
+		json_dump
+		;;
+	toggle_global)
+		en=$(echo "$input" | jsonfilter -e '@.enabled' 2>/dev/null)
+		[ "$en" = "1" ] || en=0
+		uci -q set kidtime.global.enabled="$en"
+		uci -q commit kidtime
+		"$BIN" apply >/dev/null 2>&1
+		_ok
+		;;
+	set_config)
+		# UI sends a uci-batch script of add/set/add_list lines (rules+groups).
+		# An EMPTY config is valid and means "no rules" (e.g. the user deleted the
+		# last rule) — we still wipe existing sections below.
+		cfg=$(echo "$input" | jsonfilter -e '@.config' 2>/dev/null)
+		# reject any line that doesn't operate on the kidtime package
+		bad=$(printf '%s\n' "$cfg" | grep -vE '^[[:space:]]*$|kidtime' | head -n1)
+		if [ -n "$bad" ]; then _fail "config touches non-kidtime data"; exit 0; fi
+		# wipe existing rule/group sections first (shell loop; uci batch can't iterate)
+		while uci -q delete kidtime.@rule[0] >/dev/null 2>&1; do :; done
+		while uci -q delete kidtime.@group[0] >/dev/null 2>&1; do :; done
+		# only feed uci batch when there is actual content to add
+		if [ -n "$(printf '%s' "$cfg" | tr -d '[:space:]')" ]; then
+			printf '%s\n' "$cfg" | uci batch
+		fi
+		if uci -q commit kidtime; then
+			"$BIN" apply >/dev/null 2>&1
+			_ok
+		else
+			_fail "uci commit failed"
+		fi
+		;;
+	extend)
+		mac=$(echo "$input" | jsonfilter -e '@.mac' 2>/dev/null)
+		min=$(echo "$input" | jsonfilter -e '@.minutes' 2>/dev/null)
+		[ -z "$mac" ] && { _fail "missing mac"; exit 0; }
+		case "$min" in ''|*[!0-9]*) _fail "minutes must be a positive integer"; exit 0;; esac
+		if "$BIN" extend "$mac" "$min" >/dev/null 2>&1; then _ok; else _fail "no rule owns that mac"; fi
+		;;
+	reset_day)
+		"$BIN" reset >/dev/null 2>&1
+		_ok
+		;;
+	*)
+		_fail "unknown method"
+		;;
+	esac
+	;;
+esac

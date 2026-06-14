@@ -1,0 +1,50 @@
+# /etc/config/kidtime
+#
+# Global kill switch and per-device / per-group internet time control.
+#
+# Two independent gates are applied to each device:
+#   1) WINDOW gate  -> allowed timeframes per weekday (outside = blocked)
+#   2) BUDGET gate  -> daily activity-minute budget (exhausted = blocked)
+# A device is allowed only if BOTH gates permit it.
+
+config global 'global'
+	option enabled '1'           # 0 = suspend ALL controls (everyone gets internet)
+	option active_threshold '5'  # packets/min above which a minute counts as "active"
+	option timezone_note 'uses system local time'
+
+# ---- A simple per-device rule -------------------------------------------
+# Budget is given per weekday in MINUTES (mon..sun). Empty/0 = no budget gate
+# (window-only). A window of "00:00-23:59" effectively means "no window limit".
+#
+#config rule
+#	option name 'Kid1 iPad'
+#	option mac 'AA:BB:CC:DD:EE:F1'
+#	option enabled '1'
+#	option group ''                       # empty = standalone budget
+#	# allowed windows per day (multiple allowed). Format: days hh:mm-hh:mm
+#	list window 'mon,tue,wed,thu,fri 07:00-20:00'
+#	list window 'sat,sun 08:00-21:00'
+#	# daily budget in minutes, one value per day
+#	option budget_mon '60'
+#	option budget_tue '60'
+#	option budget_wed '60'
+#	option budget_thu '60'
+#	option budget_fri '90'
+#	option budget_sat '120'
+#	option budget_sun '120'
+
+# ---- A group: several MACs sharing one budget pool ----------------------
+#config group
+#	option name 'Kid2 all devices'
+#	option enabled '1'
+#	list mac 'AA:BB:CC:DD:DE:01'          # phone
+#	list mac 'AA:BB:CC:DD:DE:02'          # tablet
+#	list window 'mon,tue,wed,thu,fri 07:00-20:00'
+#	list window 'sat,sun 08:00-21:00'
+#	option budget_mon '60'
+#	option budget_tue '60'
+#	option budget_wed '60'
+#	option budget_thu '60'
+#	option budget_fri '90'
+#	option budget_sat '120'
+#	option budget_sun '120'

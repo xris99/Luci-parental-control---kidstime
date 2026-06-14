@@ -1,0 +1,16 @@
+{
+	"luci-app-kidtime": {
+		"description": "Grant access to kidtime parental control",
+		"read": {
+			"ubus": {
+				"kidtime": [ "get_status", "list_devices" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"kidtime": [ "toggle_global", "set_config", "extend", "reset_day" ]
+			},
+			"uci": [ "kidtime" ]
+		}
+	}
+}
