@@ -15,7 +15,9 @@ list)
 	json_add_object toggle_global; json_add_string enabled ""; json_close_object
 	json_add_object set_config; json_add_string config ""; json_close_object
 	json_add_object extend; json_add_string mac ""; json_add_string minutes ""; json_close_object
+	json_add_object set_block; json_add_string mac ""; json_add_string on ""; json_close_object
 	json_add_object reset_day; json_close_object
+	json_add_object get_traffic; json_close_object
 	json_dump
 	;;
 call)
@@ -38,6 +40,10 @@ call)
 		# full UCI export so the UI can render rules/groups without many calls
 		cfg=$(uci -q export kidtime)
 		json_add_string config "$cfg"
+		# dnsmasq nftset capability + status (for the exemptions UI):
+		#   ok | nftset-unsupported | unknown
+		dstat="unknown"; [ -f /etc/kidtime/dnsmasq_status ] && dstat=$(cat /etc/kidtime/dnsmasq_status)
+		json_add_string dnsmasq_status "$dstat"
 		json_dump
 		;;
 	list_devices)
@@ -76,6 +82,10 @@ call)
 		# wipe existing rule/group sections first (shell loop; uci batch can't iterate)
 		while uci -q delete kidtime.@rule[0] >/dev/null 2>&1; do :; done
 		while uci -q delete kidtime.@group[0] >/dev/null 2>&1; do :; done
+		# wipe the global exempt lists too (tolerates missing options),
+		# so the batch can cleanly re-add the current set
+		uci -q delete kidtime.global.exempt_domain >/dev/null 2>&1
+		uci -q delete kidtime.global.exempt_ip >/dev/null 2>&1
 		# only feed uci batch when there is actual content to add
 		if [ -n "$(printf '%s' "$cfg" | tr -d '[:space:]')" ]; then
 			printf '%s\n' "$cfg" | uci batch
@@ -94,9 +104,20 @@ call)
 		case "$min" in ''|*[!0-9]*) _fail "minutes must be a positive integer"; exit 0;; esac
 		if "$BIN" extend "$mac" "$min" >/dev/null 2>&1; then _ok; else _fail "no rule owns that mac"; fi
 		;;
+	set_block)
+		mac=$(echo "$input" | jsonfilter -e '@.mac' 2>/dev/null)
+		on=$(echo "$input" | jsonfilter -e '@.on' 2>/dev/null)
+		[ -z "$mac" ] && { _fail "missing mac"; exit 0; }
+		[ "$on" = "1" ] || on=0
+		if "$BIN" block "$mac" "$on" >/dev/null 2>&1; then _ok; else _fail "no rule owns that mac"; fi
+		;;
 	reset_day)
 		"$BIN" reset >/dev/null 2>&1
 		_ok
+		;;
+	get_traffic)
+		# returns live/daily top destinations per device as JSON (own format)
+		"$BIN" traffic 2>/dev/null
 		;;
 	*)
 		_fail "unknown method"
