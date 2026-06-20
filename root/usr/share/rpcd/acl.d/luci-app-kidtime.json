@@ -3,12 +3,12 @@
 		"description": "Grant access to kidtime parental control",
 		"read": {
 			"ubus": {
-				"kidtime": [ "get_status", "list_devices" ]
+				"kidtime": [ "get_status", "list_devices", "get_traffic" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"kidtime": [ "toggle_global", "set_config", "extend", "reset_day" ]
+				"kidtime": [ "toggle_global", "set_config", "extend", "set_block", "reset_day" ]
 			},
 			"uci": [ "kidtime" ]
 		}
